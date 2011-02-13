@@ -1,0 +1,6 @@
+mhttpd
+*.o
+.project
+.cproject
+.settings
+
