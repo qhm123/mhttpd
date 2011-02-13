@@ -1,12 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+
+#define SERVERNAME "mhttpd"
 
 #define SERVPORT 8000
 #define MAXCLIENT 10
+#define REQUEST_MAX_SIZE 10240
+#define RESPONSE_MAX_SIZE 102400
+#define BUFFER_SIZE 8192
+
+void response(int client_sock_fd, int status, char *title);
+void handle_request(int client_sock_fd, const char *buf);
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +26,7 @@ int main(int argc, char *argv[])
 	struct sockaddr_in server_addr;
 	struct sockaddr_in remote_addr;
 	socklen_t remote_addr_size;
+	char buf[REQUEST_MAX_SIZE];
 
 	if ((serv_sock_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1)
 	{
@@ -41,6 +52,9 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	fprintf(stdout, "Start Server listening port %d.\n", SERVPORT);
+	fprintf(stdout, "Waiting client connection ...\n");
+
 	while (1)
 	{
 		remote_addr_size = sizeof(struct sockaddr_in);
@@ -50,7 +64,9 @@ int main(int argc, char *argv[])
 			perror("accept socket error.");
 			continue;
 		}
-		printf("received a connection from.\n");
+		fprintf(stdout, "received a connection from %s.\n", inet_ntoa(
+				remote_addr.sin_addr));
+
 		pid = fork();
 		if (pid == -1)
 		{
@@ -60,12 +76,20 @@ int main(int argc, char *argv[])
 		}
 		else if (pid == 0)
 		{
+			if (read(client_sock_fd, buf, sizeof(buf)) == -1)
+			{
+				response(client_sock_fd, 500, "Internal Server Error");
+				perror("read error.");
+				exit(EXIT_FAILURE);
+			}
 			/* child process to handle url request. */
-			handle_request();
+			handle_request(client_sock_fd, buf);
+			exit(0);
 		}
 
 		wait(NULL);
 		close(client_sock_fd);
+		fprintf(stdout, "request finished.\n");
 	}
 
 	close(serv_sock_fd);
@@ -73,7 +97,58 @@ int main(int argc, char *argv[])
 	return EXIT_SUCCESS;
 }
 
-void handle_request()
+void response_header(char *header_buf, int status, char *title, char *mine_type)
 {
+	time_t now;
+	char time_buf[100];
+	char buf[BUFFER_SIZE];
 
+	memset(buf, 0, sizeof(header_buf));
+
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "HTTP/1.0 %d %s\r\n", status, title);
+	strcat(header_buf, buf);
+
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "Server: %s\r\n", SERVERNAME);
+	strcat(header_buf, buf);
+
+	memset(buf, 0, sizeof(buf));
+	now = time((time_t *) 0);
+	strftime(time_buf, sizeof(time_buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime(
+			&now));
+	sprintf(buf, "Date: %s\r\n", time_buf);
+	strcat(header_buf, buf);
+
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "Connection: close\r\n");
+	strcat(header_buf, buf);
+
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "Content-Type: %s\r\n", mine_type);
+	strcat(header_buf, buf);
+
+	strcat(header_buf, "\r\n");
+}
+
+void response(int client_sock_fd, int status, char *title)
+{
+	char header_buf[RESPONSE_MAX_SIZE];
+	char buf[BUFFER_SIZE];
+	char buf_all[RESPONSE_MAX_SIZE];
+	response_header(header_buf, status, title, "text/html");
+	fprintf(stdout, "%s", header_buf);
+	write(client_sock_fd, header_buf, sizeof(header_buf));
+
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "<html><head><title>mhttpd</title></head>mhttpd works!</html>");
+	strcat(buf_all, buf);
+
+	write(client_sock_fd, buf_all, sizeof(buf_all));
+}
+
+void handle_request(int client_sock_fd, const char *buf)
+{
+	fprintf(stdout, "handle_request\n%s\n", buf);
+	response(client_sock_fd, 200, "OK");
 }
