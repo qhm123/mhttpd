@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #define SERVERNAME "mhttpd"
 
@@ -14,6 +15,13 @@
 #define REQUEST_MAX_SIZE 10240
 #define RESPONSE_MAX_SIZE 102400
 #define BUFFER_SIZE 8192
+
+struct request
+{
+	char method[10];
+	char path[256];
+	char protocol[20];
+};
 
 void response(int client_sock_fd, int status, char *title);
 void handle_request(int client_sock_fd, const char *buf);
@@ -147,8 +155,57 @@ void response(int client_sock_fd, int status, char *title)
 	write(client_sock_fd, buf_all, sizeof(buf_all));
 }
 
+int parse_request(const char *buf, struct request *request)
+{
+	char *first_line_request;
+	char method[10], path[256], protocol[20];
+
+	assert(request != NULL);
+
+	/* NOTE: Now just get the first line. */
+	first_line_request = strtok((char*) buf, "\r\n");
+	if (first_line_request == NULL)
+	{
+		return -1;
+	}
+	if (sscanf(first_line_request, "%s %s %s", method, path, protocol) != 3)
+	{
+		return -1;
+	}
+	fprintf(stdout, "method: %s\n", method);
+	fprintf(stdout, "path: %s\n", path);
+	fprintf(stdout, "protocol: %s\n", protocol);
+
+	strcpy(request->method, method);
+	strcpy(request->path, path);
+	strcpy(request->protocol, protocol);
+}
+
 void handle_request(int client_sock_fd, const char *buf)
 {
+	struct request request;
+
 	fprintf(stdout, "handle_request\n%s\n", buf);
-	response(client_sock_fd, 200, "OK");
+	if (parse_request(buf, &request) == -1)
+	{
+		response(client_sock_fd, 400, "Bad Request");
+		return;
+	}
+	if (strcasecmp(request.method, "GET") != 0)
+	{
+		response(client_sock_fd, 501, "Not Implemented");
+		return;
+	}
+	if (strcasecmp(request.protocol, "HTTP/1.1") != 0)
+	{
+		response(client_sock_fd, 501, "Not Implemented");
+		return;
+	}
+	if (strcasecmp(request.method, "GET") == 0)
+	{
+		response(client_sock_fd, 200, "OK");
+		return;
+	}
+	response(client_sock_fd, 400, "Bad Request");
 }
+
