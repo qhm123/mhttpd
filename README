@@ -1,0 +1,3 @@
+mhttpd is a mini http server coded by ming.
+
+mhttpd makes a reference to the micro_httpd, tmhttpd and lighttpd.
