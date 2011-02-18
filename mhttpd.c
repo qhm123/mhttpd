@@ -33,15 +33,10 @@ void response(int client_sock_fd, int status, char *title, char *mime_type,
 		char *content);
 void handle_request(int client_sock_fd, const char *buf);
 
-int main(int argc, char *argv[])
+int init_server()
 {
-	int pid;
 	int serv_sock_fd;
-	int client_sock_fd;
 	struct sockaddr_in server_addr;
-	struct sockaddr_in remote_addr;
-	socklen_t remote_addr_size;
-	char buf[REQUEST_MAX_SIZE];
 
 	if ((serv_sock_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1)
 	{
@@ -69,6 +64,15 @@ int main(int argc, char *argv[])
 
 	fprintf(stdout, "Start Server listening port %d.\n", SERVPORT);
 	fprintf(stdout, "Waiting client connection ...\n");
+}
+
+void accept_client(int serv_sock_fd)
+{
+	int pid;
+	int client_sock_fd;
+	struct sockaddr_in remote_addr;
+	socklen_t remote_addr_size;
+	char buf[REQUEST_MAX_SIZE];
 
 	while (1)
 	{
@@ -93,7 +97,8 @@ int main(int argc, char *argv[])
 		{
 			if (read(client_sock_fd, buf, sizeof(buf)) == -1)
 			{
-				response(client_sock_fd, 500, "Internal Server Error", NULL, NULL);
+				response(client_sock_fd, 500, "Internal Server Error", NULL,
+						NULL);
 				perror("read error.");
 				exit(EXIT_FAILURE);
 			}
@@ -108,6 +113,14 @@ int main(int argc, char *argv[])
 	}
 
 	close(serv_sock_fd);
+}
+
+int main(int argc, char *argv[])
+{
+	int serv_sock_fd;
+
+	serv_sock_fd = init_server();
+	accept_client(serv_sock_fd);
 
 	return EXIT_SUCCESS;
 }
@@ -165,10 +178,11 @@ void response(int client_sock_fd, int status, char *title, char *mime_type,
 	write(client_sock_fd, header_buf, sizeof(header_buf));
 
 	/* Code is ugly, now just let it run. Refactoring next time. */
-	if(status == 404)
+	if (status == 404)
 	{
 		memset(buf, 0, sizeof(buf));
-		sprintf(buf, "<html><head><title>404 File Not Found</title></head>404 File Not Found</html>");
+		sprintf(buf,
+				"<html><head><title>404 File Not Found</title></head>404 File Not Found</html>");
 		strcat(buf_all, buf);
 		write(client_sock_fd, buf_all, sizeof(buf_all));
 		return;
@@ -179,7 +193,8 @@ void response(int client_sock_fd, int status, char *title, char *mime_type,
 	}
 	/* why does I delete next two line, then the output is wrong? */
 	memset(buf, 0, sizeof(buf));
-	sprintf(buf, "<html><head><title>404 File Not Found</title></head>404 File Not Found</html>");
+	sprintf(buf,
+			"<html><head><title>404 File Not Found</title></head>404 File Not Found</html>");
 	strcat(buf_all, content);
 
 	write(client_sock_fd, buf_all, sizeof(buf_all));
@@ -315,7 +330,7 @@ int get_content(char *path, char *filename, char *content)
 	strcat(file, filename);
 	fprintf(stdout, "get content file: %s\n", file);
 	fp = fopen(file, "r");
-	if(fp == NULL)
+	if (fp == NULL)
 	{
 		fprintf(stdout, "open file error %s.\n", file);
 		fclose(fp);
@@ -324,14 +339,14 @@ int get_content(char *path, char *filename, char *content)
 	fseek(fp, 0, SEEK_END);
 	file_size = ftell(fp);
 	rewind(fp);
-	if(file_size > RESPONSE_MAX_SIZE)
+	if (file_size > RESPONSE_MAX_SIZE)
 	{
 		fprintf(stdout, "file too big error %s.\n", file);
 		fclose(fp);
 		return -1;
 	}
 	result = fread(content, 1, file_size, fp);
-	if(file_size != result)
+	if (file_size != result)
 	{
 		fprintf(stdout, "read file error %s.\n", file);
 		fclose(fp);
@@ -373,7 +388,7 @@ void handle_request(int client_sock_fd, const char *buf)
 			return;
 		}
 		strcpy(mime_type, get_content_mime_type(request.filename));
-		if(get_content(request.path, request.filename, content) == -1)
+		if (get_content(request.path, request.filename, content) == -1)
 		{
 			response(client_sock_fd, 403, "Forbidden", NULL, NULL);
 			return;
